@@ -8,6 +8,8 @@ from django.contrib.auth.password_validation import (
     NumericPasswordValidator,
     UserAttributeSimilarityValidator,
 )
+import random
+import string
 
 class CustomAccountManager(BaseUserManager):
   def create_superuser(self, email, password, **other_fields):
@@ -82,7 +84,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
   name = models.CharField(verbose_name = "Name", max_length = 150, blank = False, unique = False, null = False)
   phone = models.CharField(verbose_name = "Phone Number", max_length = 16, blank = True, null = True)
   age = models.IntegerField(default = 0, verbose_name = "Age")
-  token_code = models.CharField(verbose_name = "Auth Token Code", max_length = 255, blank = True, null = True)
+  token_code = models.CharField(verbose_name = "Auth Token Code", max_length = 16, blank = True, null = True)
   start_date = models.DateTimeField(default = timezone.now, null = False, blank = False)
   is_active = models.BooleanField(verbose_name = "Is Active?", default = False)
   is_staff = models.BooleanField(verbose_name = "Is Staff?", default = False)
@@ -91,6 +93,13 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
   
   USERNAME_FIELD = 'email'
   
+  def generate_random_token(self):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+  
+  def save(self, *args, **kwargs):
+    self.token_code = self.generate_random_token()
+    super(CustomUser, self).save(*args, **kwargs)
+    
   def __str__(self):
     return self.name
   
