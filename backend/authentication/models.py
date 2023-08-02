@@ -82,7 +82,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
   email = models.EmailField(verbose_name = "E-mail Adress", unique = True, null = False, blank = False)
   password = models.CharField(verbose_name = "Password", max_length = 255, blank = False, null = False)
   name = models.CharField(verbose_name = "Name", max_length = 150, blank = False, unique = False, null = False)
-  phone = models.CharField(verbose_name = "Phone Number", max_length = 16, blank = True, null = True)
+  phone = models.CharField(verbose_name = "Phone Number", max_length = 21, blank = True, null = True)
   age = models.IntegerField(default = 0, verbose_name = "Age")
   token_code = models.CharField(verbose_name = "Auth Token Code", max_length = 16, blank = True, null = True)
   start_date = models.DateTimeField(default = timezone.now, null = False, blank = False)

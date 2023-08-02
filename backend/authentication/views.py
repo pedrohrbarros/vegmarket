@@ -2,6 +2,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from .serializers import CustomUserSerializer
 from django.core.mail import EmailMessage
+from django.utils.html import strip_tags
 from .models import CustomUser
 from rest_framework.exceptions import AuthenticationFailed, PermissionDenied, NotAuthenticated, ValidationError
 import jwt, datetime
@@ -15,6 +16,7 @@ from django.contrib.auth.password_validation import (
 import re
 from django.conf import settings
 from rest_framework import status
+from django.template.loader import render_to_string
 
 class CustomUserView(APIView):
   def get(self, request, format = 'json'):
@@ -22,18 +24,18 @@ class CustomUserView(APIView):
     auth_token = request.headers.get('Authorization', None)
     
     if auth_token is None:
-      raise PermissionDenied('No authorization token was provided')
+      raise PermissionDenied({'detail':'No authorization token was provided'})
     
     if auth_token != config('AUTHORIZATION_TOKEN'):
-      raise PermissionDenied('Wrong authorization token')
+      raise PermissionDenied({'detail':'Wrong authorization token'})
     
     if jwt_token is None:
-      raise NotAuthenticated('Unauthenticated')
+      raise NotAuthenticated({'detail':'Unauthenticated'})
     
     try:
       payload = jwt.decode(jwt_token, 'secret', algorithms = ["HS256"])
     except jwt.ExpiredSignatureError:
-      raise NotAuthenticated("Authentication token has expired")
+      raise NotAuthenticated({'detail':'Wrong JWT authentication code'})
     
     user = CustomUser.objects.filter(id = payload['id']).first()
     
@@ -43,28 +45,33 @@ class CustomUserView(APIView):
   
   def post (self, request, format = 'json'):
     auth_token = request.headers.get('Authorization', None)
-    email = request.POST.get('email', None)
-    password = request.POST.get('password', None)
-    phone = request.POST.get('phone', None)
-    age = request.POST.get('age', None)
     
     if auth_token is None:
-      raise PermissionDenied('No authorization token was provided')
+      raise PermissionDenied({'detail':'No authorization token was provided'})
     
     if auth_token != config('AUTHORIZATION_TOKEN'):
-      raise PermissionDenied('Wrong authorization token')
+      raise PermissionDenied({'detail':'Wrong authorization token'})
     
-    if CustomUser.objects.filter(email = email).exists():
-      raise ValidationError('User already exists')
+    if 'name' not in request.data:
+      raise ValidationError({'detail':'Name is required'})
     
-    if email is None:
-      raise ValidationError('Email is required')
+    if 'email' not in request.data:
+      raise ValidationError({'detail':'Email is required'})
     
-    if password is None:
-      raise ValidationError('Password is required')
+    email = request.data['email']
     
-    if age is None:
-      raise ValidationError('Age is required')
+    if 'password' not in request.data:
+      raise ValidationError({'detail':'Password is required'})
+    
+    password = request.data['password']
+    
+    if 'age' not in request.data:
+      raise ValidationError({'detail':'Age is required'})
+    
+    age = request.data['age']
+    
+    if age > 149:
+      raise ValidationError({'detail':'Invalid age'})
     
     password_validators = [
       MinimumLengthValidator(),
@@ -80,60 +87,72 @@ class CustomUserView(APIView):
         password_validation_errors.extend(e.messages)
     
     if password_validation_errors:
-      raise ValidationError('\n'.join(password_validation_errors))
+      raise ValidationError({'detail':' '.join(password_validation_errors)})
     
-    pattern1 = r'^\+\d{2} \(\d{2}\) \d{5}-\d{4}$'  # +99 (99) 99999-9999
-    pattern2 = r'^\+\d{3} \(\d{2}\) \d{5}-\d{4}$'  # +999 (99) 99999-9999
+    if 'phone' in request.data:
+      phone = request.data['phone']
     
-    if not (re.match(pattern1, phone) or re.match(pattern2, phone)):
-      raise ValidationError("Invalid phone number")
+      pattern1 = r'^\+\d{2} \(\d{2}\) \d{5}-\d{4}$'  # +99 (99) 99999-9999
+      pattern2 = r'^\+\d{3} \(\d{2}\) \d{5}-\d{4}$'  # +999 (99) 99999-9999
+      
+      if not (re.match(pattern1, phone) or re.match(pattern2, phone)):
+        raise ValidationError({'detail':'Invalid phone number'})
     
-    if age > 99:
-      raise ValidationError('Invalid age')
+    if CustomUser.objects.filter(email = email).exists():
+      raise ValidationError({'detail':'User already exists'})
+    
+    request.data['is_staff'] = False
+
+    # User will be active after the validation of the token code
+    request.data['is_active'] = False
     
     serializer = CustomUserSerializer(data = request.data)
     if (serializer.is_valid()):
       user = serializer.save()
+      token_code = CustomUser.objects.filter(email = email).first().token_code
       if user:
+        html_message = render_to_string('email/index.html', {'token_code': token_code})
         email_message = EmailMessage(
-          'Please confirm your account',
-          'Follow below your confirmation code: \n{user.token_code}',
+          '[VegMarket] - Account Confirmation',
+          html_message,
           settings.EMAIL_HOST_USER,
-          [request.data['email']]
+          [email]
         )
         email_message.fail_silently = False
+        email_message.content_subtype = 'html'
         email_message.send()
-        json = serializer.data
-        
-        return Response(json, status = status.HTTP_201_CREATED)
-      return Response(json, status = status.HTTP_403_FORBIDDEN)
-    return Response(serializer.errors, status = status.HTTP_400_BAD_REQUEST)
+        return Response({'detail':'User created successfully'}, status = status.HTTP_201_CREATED)
+      return Response({'detail': 'User created successfully, but failed to send confirmation code'}, status = status.HTTP_206_PARTIAL_CONTENT)
+    return Response({'detail':serializer.errors}, status = status.HTTP_400_BAD_REQUEST)
     
     
 class LoginView(APIView):
   def post(self, request): 
     auth_token = request.headers.get('Authorization', None)
-    email = request.POST.get('email', None)
-    password = request.get('password', None)
-    user = CustomUser.objects.filter(email = email).first()
     
     if auth_token is None:
-      raise PermissionDenied('No authorization token was provided')
+      raise PermissionDenied({'detail':'No authorization token was provided'})
     
     if auth_token != config('AUTHORIZATION_TOKEN'):
-      raise PermissionDenied('Wrong authorization token')
+      raise PermissionDenied({'detail':'Wrong authorization token'})
     
-    if email is None:
-      raise ValidationError('Email is required')
+    if 'email' not in request.data:
+      raise ValidationError({'detail':'Email is required'})
     
-    if password is None:
-      raise ValidationError('Password is required')
+    email = request.data['email']
+    
+    if 'password' not in request.data:
+      raise ValidationError({'detail':'Password is required'})
+    
+    password = request.data['password']
+    
+    user = CustomUser.objects.filter(email = email).first()
     
     if user is None:
-      raise AuthenticationFailed('User not found')
+      raise AuthenticationFailed({'detail':'User not found'})
     
     if not user.check_password(password):
-      raise AuthenticationFailed("Incorrect password")
+      raise AuthenticationFailed({'detail':'Incorrect password'})
     
     payload = {
       'id': user.id,
@@ -147,13 +166,48 @@ class LoginView(APIView):
     
     response.set_cookie(key = 'jwt', value = token, httponly = True)
     
-    response.data = {
-      'Message':'Token successfully created'
-    }
+    response.data = {'detail':'Token successfully created'}
     
     return response
   
-# class SendConfirmationTokenView(APIView):
-#   def post(self, request, format = 'json'):
-#     jwt_token = request.COOKIES.get('jwt')
-#     auth_token = request.headers.get('Authorization')
+class ActivateAccountView(APIView):
+  def post(self, request, format = 'json'):
+    jwt_token = request.COOKIES.get('jwt')
+    auth_token = request.headers.get('Authorization')
+    
+    if auth_token is None:
+      raise PermissionDenied({'detail':'No authorization token was provided'})
+    
+    if auth_token != config('AUTHORIZATION_TOKEN'):
+      raise PermissionDenied({'detail':'Wrong authorization token'})
+    
+    if jwt_token is None:
+      raise NotAuthenticated({'detail':'Unauthenticated'})
+    
+    try:
+      payload = jwt.decode(jwt_token, 'secret', algorithms = ["HS256"])
+    except jwt.ExpiredSignatureError:
+      raise NotAuthenticated({'detail':'Wrong JWT authentication code'})
+    
+    user = CustomUser.objects.filter(id = payload['id']).first()
+    
+    if user.is_active:
+      raise ValidationError({'detail': 'User already active'})
+    
+    if 'token_code' not in request.data:
+      raise ValidationError({'detail': 'Token code was not provided'})
+    
+    token_code = request.data['token_code']
+
+    if token_code != user.token_code:
+      raise ValidationError({'detail': 'Invalid token code'})
+    
+    user.is_active = True
+    user.is_staff = False
+    user.save()
+    
+    response = Response()
+    
+    response.data = {'detail': 'User activated successfull'}
+    
+    return response
