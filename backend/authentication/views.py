@@ -21,21 +21,14 @@ from django.template.loader import render_to_string
 class CustomUserView(APIView):
   def get(self, request, format = 'json'):
     jwt_token = request.COOKIES.get('jwt', None)
-    auth_token = request.headers.get('Authorization', None)
-    
-    if auth_token is None:
-      raise PermissionDenied({'detail':'No authorization token was provided'})
-    
-    if auth_token != config('AUTHORIZATION_TOKEN'):
-      raise PermissionDenied({'detail':'Wrong authorization token'})
     
     if jwt_token is None:
-      raise NotAuthenticated({'detail':'Unauthenticated'})
+      raise NotAuthenticated('Unauthenticated')
     
     try:
       payload = jwt.decode(jwt_token, 'secret', algorithms = ["HS256"])
     except jwt.ExpiredSignatureError:
-      raise NotAuthenticated({'detail':'Wrong JWT authentication code'})
+      raise NotAuthenticated('Wrong JWT authentication code')
     
     user = CustomUser.objects.filter(id = payload['id']).first()
     
@@ -47,10 +40,10 @@ class CustomUserView(APIView):
     auth_token = request.headers.get('Authorization', None)
     
     if auth_token is None:
-      raise PermissionDenied({'detail':'No authorization token was provided'})
+      raise PermissionDenied('No authorization token was provided')
     
     if auth_token != config('AUTHORIZATION_TOKEN'):
-      raise PermissionDenied({'detail':'Wrong authorization token'})
+      raise PermissionDenied('Wrong authorization token')
     
     if 'name' not in request.data:
       raise ValidationError({'detail':'Name is required'})
@@ -124,17 +117,56 @@ class CustomUserView(APIView):
         return Response({'detail':'User created successfully'}, status = status.HTTP_201_CREATED)
       return Response({'detail': 'User created successfully, but failed to send confirmation code'}, status = status.HTTP_206_PARTIAL_CONTENT)
     return Response({'detail':serializer.errors}, status = status.HTTP_400_BAD_REQUEST)
+  
+  def patch(self, request, format = 'json'):
+    jwt_token = request.COOKIES.get('jwt')
     
+    if jwt_token is None:
+      raise NotAuthenticated('Unauthenticated')
+    
+    try:
+      payload = jwt.decode(jwt_token, 'secret', algorithms = ["HS256"])
+    except jwt.ExpiredSignatureError:
+      raise NotAuthenticated('Wrong JWT authentication code')
+    
+    user = CustomUser.objects.filter(id = payload['id']).first()
+    serializer = CustomUserSerializer(user, data = request.data, partial = True)
+    
+    if ('is_staff' in request.data) or ('is_active' in request.data) or ('start_date' in request.data) or ('id' in request.data):
+      raise PermissionDenied('You are not allowed to update this field')
+    
+    if serializer.is_valid():
+      serializer.save()
+      return Response({'detail': 'User updated successfully'}, status = status.HTTP_202_ACCEPTED)
+    return Response ({'detail': serializer.errors}, status = status.HTTP_400_BAD_REQUEST)
+  
+  def delete(self, request, format = 'json'):
+    jwt_token = request.COOKIES.get('jwt')
+    
+    if jwt_token is None:
+      raise NotAuthenticated('Unauthenticated')
+    
+    try:
+      payload = jwt.decode(jwt_token, 'secret', algorithms = ["HS256"])
+    except jwt.ExpiredSignatureError:
+      raise NotAuthenticated('Wrong JWT authentication code')
+    
+    user = CustomUser.objects.filter(id = payload['id']).first()
+    
+    if user:
+      user.delete()
+      return Response({'detail': 'User deleted successfully'}, status = status.HTTP_200_OK)
+    return Response({'detail': 'User not found'}, status = status.HTTP_404_NOT_FOUND)  
     
 class LoginView(APIView):
-  def post(self, request): 
+  def post(self, request, format = 'json'): 
     auth_token = request.headers.get('Authorization', None)
     
     if auth_token is None:
-      raise PermissionDenied({'detail':'No authorization token was provided'})
+      raise PermissionDenied('No authorization token was provided')
     
     if auth_token != config('AUTHORIZATION_TOKEN'):
-      raise PermissionDenied({'detail':'Wrong authorization token'})
+      raise PermissionDenied('Wrong authorization token')
     
     if 'email' not in request.data:
       raise ValidationError({'detail':'Email is required'})
@@ -149,16 +181,19 @@ class LoginView(APIView):
     user = CustomUser.objects.filter(email = email).first()
     
     if user is None:
-      raise AuthenticationFailed({'detail':'User not found'})
+      raise AuthenticationFailed('User not found')
     
     if not user.check_password(password):
-      raise AuthenticationFailed({'detail':'Incorrect password'})
+      raise AuthenticationFailed('Incorrect password')
     
     payload = {
       'id': user.id,
       'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=60),
       'iat': datetime.datetime.utcnow()
     }
+    
+    user.last_login = datetime.datetime.utcnow()
+    user.save()
     
     token = jwt.encode(payload, 'secret', algorithm= 'HS256')
     
@@ -173,21 +208,14 @@ class LoginView(APIView):
 class ActivateAccountView(APIView):
   def post(self, request, format = 'json'):
     jwt_token = request.COOKIES.get('jwt')
-    auth_token = request.headers.get('Authorization')
-    
-    if auth_token is None:
-      raise PermissionDenied({'detail':'No authorization token was provided'})
-    
-    if auth_token != config('AUTHORIZATION_TOKEN'):
-      raise PermissionDenied({'detail':'Wrong authorization token'})
     
     if jwt_token is None:
-      raise NotAuthenticated({'detail':'Unauthenticated'})
+      raise NotAuthenticated('Unauthenticated')
     
     try:
       payload = jwt.decode(jwt_token, 'secret', algorithms = ["HS256"])
     except jwt.ExpiredSignatureError:
-      raise NotAuthenticated({'detail':'Wrong JWT authentication code'})
+      raise NotAuthenticated('Wrong JWT authentication code')
     
     user = CustomUser.objects.filter(id = payload['id']).first()
     
