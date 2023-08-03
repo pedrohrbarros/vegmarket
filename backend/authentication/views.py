@@ -2,7 +2,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from .serializers import CustomUserSerializer
 from django.core.mail import EmailMessage
-from django.utils.html import strip_tags
 from .models import CustomUser
 from rest_framework.exceptions import AuthenticationFailed, PermissionDenied, NotAuthenticated, ValidationError
 import jwt, datetime
