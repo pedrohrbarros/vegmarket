@@ -205,6 +205,30 @@ class LoginView(APIView):
     return response
   
 class ActivateAccountView(APIView):
+  def get(self, request, format = 'json'):
+    jwt_token = request.COOKIES.get('jwt')
+    
+    if jwt_token is None:
+      raise NotAuthenticated('Unauthenticated')
+    
+    try:
+      payload = jwt.decode(jwt_token, 'secret', algorithms = ["HS256"])
+    except jwt.ExpiredSignatureError:
+      raise NotAuthenticated('Wrong JWT authentication code')
+    
+    user = CustomUser.objects.filter(id = payload['id']).first()
+    
+    if not user:
+      raise ValidationError({'detail': 'User not found'})
+    
+    if user.is_active:
+      raise ValidationError({'detail': 'User already active'})
+    
+    token_code = user.token_code
+    
+    return Response({'detail': token_code})
+  
+  
   def post(self, request, format = 'json'):
     jwt_token = request.COOKIES.get('jwt')
     
@@ -217,6 +241,9 @@ class ActivateAccountView(APIView):
       raise NotAuthenticated('Wrong JWT authentication code')
     
     user = CustomUser.objects.filter(id = payload['id']).first()
+    
+    if not user:
+      raise ValidationError({'detail': 'User not found'})
     
     if user.is_active:
       raise ValidationError({'detail': 'User already active'})
