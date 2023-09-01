@@ -1,0 +1,8 @@
+{
+  "Authentication":{
+    "E-mail":"E-mail",
+    "Sign In": "Entrar",
+    "Password":"Senha",
+    "Forgot your password?":"Esqueceu sua senha?"
+  }
+}
