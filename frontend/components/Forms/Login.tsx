@@ -1,5 +1,4 @@
 import { useTranslations } from 'next-intl';
-import { motion } from 'framer-motion'
 import Image from 'next/image'
 import logo from '@/public/logo.png'
 import Button from '../Button';
@@ -9,17 +8,8 @@ export default function LoginForm() {
   const t = useTranslations('Authentication');
 
   return (
-    <motion.form className="relative w-[40%] h-full px-5 rounded-lg flex flex-col justify-center items-center gap-10 max-[768px]:w-full"
-      animate = {{
-        rotateY: 360,
-        backgroundColor: "#503530"
-      }}
-      transition = {{
-        type: "spring",
-        duration: 1.7,
-      }}
-    >
-      <Image src={logo} alt = "Nature transforms your life" className="w-[30%] h-auto rounded-full absolute -top-[60px]"/>
+    <form className="w-full h-full px-5 flex flex-col justify-center items-center gap-10 max-[768px]:w-full bg-sepia">
+      <Image src={logo} alt = "Nature transforms your life" className="w-[30%] h-auto rounded-full absolute -top-[10px]"/>
       <h1 className="text-5xl font-extrabold text-transparent font-outline-2">{t('Sign In')}</h1>
       <div
         className="h-auto flex w-[75%] max-[768px]:w-full flex-col justify-center items-start gap-2 relative">
@@ -61,6 +51,6 @@ export default function LoginForm() {
       <div className="w-[75%] max-[768px]:w-full">
         <Button text={t('Sign In')} onClick={() => console.log('teste')}/>
       </div>
-    </motion.form>
+    </form>
   )
 }
